@@ -1,10 +1,12 @@
 package obfs
 
 import (
-	"crypto/sha256"
+	"encoding/binary"
 	"math/rand"
-	"sync"
-	"time"
+	"sync/atomic"
+
+	"github.com/valyala/bytebufferpool"
+	hasher "github.com/zeebo/blake3"
 )
 
 type Obfuscator interface {
@@ -12,22 +14,25 @@ type Obfuscator interface {
 	Obfuscate(in []byte, out []byte) int
 }
 
-const xpSaltLen = 16
+const (
+	xpSaltLen  = 4 // bytes of uint32
+	xorKeySize = 32
+)
 
 // XPlusObfuscator obfuscates payload using one-time keys generated from hashing a pre-shared key and random salt.
 // Packet format: [salt][obfuscated payload]
 type XPlusObfuscator struct {
-	Key     []byte
-	RandSrc *rand.Rand
-
-	lk sync.Mutex
+	Key  []byte
+	salt atomic.Uint32
 }
 
 func NewXPlusObfuscator(key []byte) *XPlusObfuscator {
-	return &XPlusObfuscator{
-		Key:     key,
-		RandSrc: rand.New(rand.NewSource(time.Now().UnixNano())),
+	obfs := &XPlusObfuscator{
+		Key:  key,
+		salt: atomic.Uint32{},
 	}
+	obfs.salt.Store(rand.Uint32() & 0xFFF)
+	return obfs
 }
 
 func (x *XPlusObfuscator) Deobfuscate(in []byte, out []byte) int {
@@ -35,9 +40,9 @@ func (x *XPlusObfuscator) Deobfuscate(in []byte, out []byte) int {
 	if outLen <= 0 || len(out) < outLen {
 		return 0
 	}
-	key := sha256.Sum256(append(x.Key, in[:xpSaltLen]...))
+	key := hasher.Sum256(append(x.Key, in[:xpSaltLen]...))
 	for i, c := range in[xpSaltLen:] {
-		out[i] = c ^ key[i%sha256.Size]
+		out[i] = c ^ key[i%xorKeySize]
 	}
 	return outLen
 }
@@ -47,12 +52,27 @@ func (x *XPlusObfuscator) Obfuscate(in []byte, out []byte) int {
 	if len(out) < outLen {
 		return 0
 	}
-	x.lk.Lock()
-	_, _ = x.RandSrc.Read(out[:xpSaltLen])
-	x.lk.Unlock()
-	key := sha256.Sum256(append(x.Key, out[:xpSaltLen]...))
+
+	salt := out[:xpSaltLen]
+	binary.LittleEndian.PutUint32(salt, x.salt.Add(1))
+
+	xorKey := hasher.Sum256(append(x.Key, salt...))
+	payload := out[xpSaltLen:]
 	for i, c := range in {
-		out[i+xpSaltLen] = c ^ key[i%sha256.Size]
+		payload[i] = c ^ xorKey[i%xorKeySize]
+	}
+	return outLen
+}
+
+func (x *XPlusObfuscator) ObfuscateOnBuffer(in []byte, out *bytebufferpool.ByteBuffer) int {
+	outLen := len(in) + xpSaltLen
+
+	salt := make([]byte, xpSaltLen)
+	binary.LittleEndian.PutUint32(salt, x.salt.Add(1))
+
+	xorKey := hasher.Sum256(append(x.Key, salt...))
+	for i, c := range in {
+		out.WriteByte(c ^ xorKey[i%xorKeySize])
 	}
 	return outLen
 }
