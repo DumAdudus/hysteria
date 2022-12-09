@@ -16,6 +16,8 @@ import (
 	"github.com/apernet/hysteria/core/pmtud"
 	"github.com/apernet/hysteria/core/sockopt"
 	"github.com/apernet/hysteria/core/transport"
+
+	// gops "github.com/google/gops/agent"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -33,6 +35,7 @@ var serverPacketConnFuncFactoryMap = map[string]pktconns.ServerPacketConnFuncFac
 }
 
 func server(config *serverConfig) {
+	// gops.Listen(gops.Options{})
 	logrus.WithField("config", config.String()).Info("Server configuration loaded")
 	config.Fill() // Fill default values
 	// Resolver
@@ -83,7 +86,7 @@ func server(config *serverConfig) {
 		MaxConnectionReceiveWindow:     config.ReceiveWindowClient,
 		MaxIncomingStreams:             int64(config.MaxConnClient),
 		MaxIdleTimeout:                 ServerMaxIdleTimeoutSec * time.Second,
-		KeepAlivePeriod:                0, // Keep alive should solely be client's responsibility
+		KeepAlivePeriod:                8 * time.Second, // 0, // Keep alive should solely be client's responsibility
 		DisablePathMTUDiscovery:        config.DisableMTUDiscovery,
 		EnableDatagrams:                true,
 	}

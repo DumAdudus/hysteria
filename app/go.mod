@@ -71,6 +71,8 @@ require (
 	github.com/subosito/gotenv v1.4.2 // indirect
 	github.com/txthinking/runnergroup v0.0.0-20210608031112-152c7c4432bf // indirect
 	github.com/txthinking/x v0.0.0-20210326105829-476fab902fbe // indirect
+	github.com/valyala/bytebufferpool v0.0.0-20201104193830-18533face0df // indirect
+	github.com/zeebo/blake3 v0.2.3 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
