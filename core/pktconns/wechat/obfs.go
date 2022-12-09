@@ -5,53 +5,58 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/apernet/hysteria/core/pktconns/obfs"
+	"github.com/valyala/bytebufferpool"
 )
 
-const udpBufferSize = 4096
+const (
+	udpBufferSize = 2048
+	headerSize    = 13
+)
+
+var (
+	initHeader                = [headerSize]byte{0xa1, 0x08, 0xff, 0xff, 0xff, 0xff, 0x00, 0x10, 0x11, 0x18, 0x30, 0x22, 0x30}
+	hintBuf                   = make([]byte, udpBufferSize)
+	_          net.PacketConn = &ObfsWeChatUDPPacketConn{}
+)
 
 // ObfsWeChatUDPPacketConn is still a UDP packet conn, but it adds WeChat video call header to each packet.
 // Obfs in this case can be nil
 type ObfsWeChatUDPPacketConn struct {
 	orig *net.UDPConn
 	obfs obfs.Obfuscator
-
-	readBuf    []byte
-	readMutex  sync.Mutex
-	writeBuf   []byte
-	writeMutex sync.Mutex
-	sn         uint32
+	sn   uint32
 }
 
 func NewObfsWeChatUDPConn(orig *net.UDPConn, obfs obfs.Obfuscator) *ObfsWeChatUDPPacketConn {
-	return &ObfsWeChatUDPPacketConn{
-		orig:     orig,
-		obfs:     obfs,
-		readBuf:  make([]byte, udpBufferSize),
-		writeBuf: make([]byte, udpBufferSize),
-		sn:       rand.Uint32() & 0xFFFF,
+	conn := &ObfsWeChatUDPPacketConn{
+		orig: orig,
+		obfs: obfs,
+		sn:   rand.Uint32() & 0xFFF,
 	}
+	return conn
 }
 
 func (c *ObfsWeChatUDPPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	poolBuf := bytebufferpool.Get()
+	defer bytebufferpool.Put(poolBuf)
+
 	for {
-		c.readMutex.Lock()
-		n, addr, err := c.orig.ReadFrom(c.readBuf)
-		if n <= 13 {
-			c.readMutex.Unlock()
+		poolBuf.Set(hintBuf)
+		n, addr, err := c.orig.ReadFrom(poolBuf.Bytes())
+		if n <= headerSize {
 			return 0, addr, err
 		}
+		payload := poolBuf.Bytes()[headerSize:n]
 		var newN int
 		if c.obfs != nil {
-			newN = c.obfs.Deobfuscate(c.readBuf[13:n], p)
+			newN = c.obfs.Deobfuscate(payload, p)
 		} else {
-			newN = copy(p, c.readBuf[13:n])
+			newN = copy(p, payload)
 		}
-		c.readMutex.Unlock()
 		if newN > 0 {
 			// Valid packet
 			return newN, addr, err
@@ -63,26 +68,24 @@ func (c *ObfsWeChatUDPPacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 func (c *ObfsWeChatUDPPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.writeMutex.Lock()
-	c.writeBuf[0] = 0xa1
-	c.writeBuf[1] = 0x08
-	binary.BigEndian.PutUint32(c.writeBuf[2:], c.sn)
+	header := initHeader[:]
+	// Set SN, we don't care what is it, so no lock
+	sn := header[2:6]
+	binary.BigEndian.PutUint32(sn, c.sn)
 	c.sn++
-	c.writeBuf[6] = 0x00
-	c.writeBuf[7] = 0x10
-	c.writeBuf[8] = 0x11
-	c.writeBuf[9] = 0x18
-	c.writeBuf[10] = 0x30
-	c.writeBuf[11] = 0x22
-	c.writeBuf[12] = 0x30
-	var bn int
+
+	poolBuf := bytebufferpool.Get()
+	defer bytebufferpool.Put(poolBuf)
+	poolBuf.Set(header)
+
 	if c.obfs != nil {
-		bn = c.obfs.Obfuscate(p, c.writeBuf[13:])
+		xplusObfs, _ := c.obfs.(*obfs.XPlusObfuscator) // Currently there's only this XPlus obfs
+		xplusObfs.ObfuscateOnBuffer(p, poolBuf)
 	} else {
-		bn = copy(c.writeBuf[13:], p)
+		poolBuf.Write(p)
 	}
-	_, err = c.orig.WriteTo(c.writeBuf[:13+bn], addr)
-	c.writeMutex.Unlock()
+	_, err = c.orig.WriteTo(poolBuf.Bytes(), addr)
+
 	if err != nil {
 		return 0, err
 	} else {
