@@ -1,6 +1,6 @@
 module github.com/apernet/hysteria/core
 
-go 1.18
+go 1.19
 
 require (
 	github.com/coreos/go-iptables v0.6.0
@@ -37,8 +37,8 @@ require (
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/txthinking/runnergroup v0.0.0-20210608031112-152c7c4432bf // indirect
 	github.com/txthinking/x v0.0.0-20210326105829-476fab902fbe // indirect
-	golang.org/x/crypto v0.3.0 // indirect
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
+	golang.org/x/crypto v0.4.0 // indirect
+	golang.org/x/exp v0.0.0-20221114191408-850992195362 // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.4.0 // indirect
 	golang.org/x/tools v0.4.0 // indirect

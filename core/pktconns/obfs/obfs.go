@@ -55,8 +55,8 @@ func (x *XPlusObfuscator) Obfuscate(in []byte, out []byte) int {
 
 	salt := out[:xpSaltLen]
 	binary.LittleEndian.PutUint32(salt, x.salt.Add(1))
-
 	xorKey := hasher.Sum256(append(x.Key, salt...))
+
 	payload := out[xpSaltLen:]
 	for i, c := range in {
 		payload[i] = c ^ xorKey[i%xorKeySize]
@@ -67,10 +67,21 @@ func (x *XPlusObfuscator) Obfuscate(in []byte, out []byte) int {
 func (x *XPlusObfuscator) ObfuscateOnBuffer(in []byte, out *bytebufferpool.ByteBuffer) int {
 	outLen := len(in) + xpSaltLen
 
-	salt := make([]byte, xpSaltLen)
-	binary.LittleEndian.PutUint32(salt, x.salt.Add(1))
+	salt := x.salt.Add(1)
+	key_salt := bytebufferpool.Get()
+	defer bytebufferpool.Put(key_salt)
 
-	xorKey := hasher.Sum256(append(x.Key, salt...))
+	key_salt.Set(x.Key)
+	// little endian
+	func(buf *bytebufferpool.ByteBuffer, v uint32) {
+		buf.WriteByte(byte(v))
+		buf.WriteByte(byte(v >> 8))
+		buf.WriteByte(byte(v >> 16))
+		buf.WriteByte(byte(v >> 24))
+	}(key_salt, salt)
+	out.Write(key_salt.Bytes()[len(x.Key):])
+
+	xorKey := hasher.Sum256(key_salt.Bytes())
 	for i, c := range in {
 		out.WriteByte(c ^ xorKey[i%xorKeySize])
 	}
