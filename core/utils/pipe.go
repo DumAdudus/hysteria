@@ -4,19 +4,22 @@ import (
 	"io"
 	"net"
 	"time"
+
+	"github.com/valyala/bytebufferpool"
 )
 
-const PipeBufferSize = 32 * 1024
+const PipeBufferSize = 16 * 1024
+
+var hintBuf = make([]byte, PipeBufferSize)
 
 func Pipe(src, dst io.ReadWriter, count func(int)) error {
-	buf := make([]byte, PipeBufferSize)
+	poolBuf := bytebufferpool.Get()
+	defer bytebufferpool.Put(poolBuf)
 	for {
-		rn, err := src.Read(buf)
+		poolBuf.Set(hintBuf)
+		rn, err := src.Read(poolBuf.Bytes())
 		if rn > 0 {
-			if count != nil {
-				count(rn)
-			}
-			_, err := dst.Write(buf[:rn])
+			_, err := dst.Write(poolBuf.Bytes()[:rn])
 			if err != nil {
 				return err
 			}

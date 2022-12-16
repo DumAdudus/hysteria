@@ -15,9 +15,17 @@ import (
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lunixbochs/struc"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/valyala/bytebufferpool"
 )
 
-const udpBufferSize = 4096
+const (
+	udpBufferSize = 2048
+)
+
+var (
+	hintBuf = make([]byte, udpBufferSize)
+	holdBuf = make([]byte, 1024)
+)
 
 type serverClient struct {
 	CC              quic.Connection
@@ -320,30 +328,36 @@ func (c *serverClient) handleUDP(stream quic.Stream) {
 
 	// Receive UDP packets, send them to the client
 	go func() {
-		buf := make([]byte, udpBufferSize)
+		readBuf := bytebufferpool.Get()
+		defer bytebufferpool.Put(readBuf)
+		writeBuf := bytebufferpool.Get()
+		defer bytebufferpool.Put(writeBuf)
+
 		for {
-			n, rAddr, err := conn.ReadFrom(buf)
+			readBuf.Set(hintBuf)
+			writeBuf.Reset()
+
+			n, rAddr, err := conn.ReadFrom(readBuf.Bytes())
 			if n > 0 {
-				var msgBuf bytes.Buffer
 				msg := udpMessage{
 					SessionID: id,
 					Host:      rAddr.IP.String(),
 					Port:      uint16(rAddr.Port),
 					FragCount: 1,
-					Data:      buf[:n],
+					Data:      readBuf.Bytes()[:n],
 				}
 				// try no frag first
-				_ = struc.Pack(&msgBuf, &msg)
-				sendErr := c.CC.SendMessage(msgBuf.Bytes())
+				_ = struc.Pack(writeBuf, &msg)
+				sendErr := c.CC.SendMessage(writeBuf.Bytes())
 				if sendErr != nil {
 					if errSize, ok := sendErr.(quic.ErrMessageTooLarge); ok {
 						// need to frag
 						msg.MsgID = uint16(rand.Intn(0xFFFF)) + 1 // msgID must be > 0 when fragCount > 1
 						fragMsgs := fragUDPMessage(msg, int(errSize))
 						for _, fragMsg := range fragMsgs {
-							msgBuf.Reset()
-							_ = struc.Pack(&msgBuf, &fragMsg)
-							_ = c.CC.SendMessage(msgBuf.Bytes())
+							writeBuf.Reset()
+							_ = struc.Pack(writeBuf, &fragMsg)
+							_ = c.CC.SendMessage(writeBuf.Bytes())
 						}
 					}
 				}
@@ -359,9 +373,8 @@ func (c *serverClient) handleUDP(stream quic.Stream) {
 	}()
 
 	// Hold the stream until it's closed by the client
-	buf := make([]byte, 1024)
 	for {
-		_, err = stream.Read(buf)
+		_, err = stream.Read(holdBuf)
 		if err != nil {
 			break
 		}
