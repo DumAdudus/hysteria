@@ -72,7 +72,7 @@ func (c *ObfsUDPPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 
 	if c.obfs != nil {
 		obfs, _ := c.obfs.(interface {
-			ObfuscateOnBuffer(in []byte, out *bytebufferpool.ByteBuffer) int
+			ObfuscateOnBuffer([]byte, *bytebufferpool.ByteBuffer) int
 		})
 		obfs.ObfuscateOnBuffer(p, poolBuf)
 	} else {

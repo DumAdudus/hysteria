@@ -36,8 +36,13 @@ func NewClientUDPConnFunc(obfsPassword string, hopInterval time.Duration) Client
 		}
 	} else {
 		return func(server string) (net.PacketConn, net.Addr, error) {
+			var ob obfs.Obfuscator
+			if obfsPassword == obfs.FlipTrigger {
+				ob = obfs.NewFlipObfuscator()
+			} else {
+				ob = obfs.NewXPlusObfuscator([]byte(obfsPassword))
+			}
 			if isMultiPortAddr(server) {
-				ob := obfs.NewXPlusObfuscator([]byte(obfsPassword))
 				return udp.NewObfsUDPHopClientPacketConn(server, hopInterval, ob)
 			}
 			sAddr, err := net.ResolveUDPAddr("udp", server)
@@ -48,7 +53,6 @@ func NewClientUDPConnFunc(obfsPassword string, hopInterval time.Duration) Client
 			if err != nil {
 				return nil, nil, err
 			}
-			ob := obfs.NewXPlusObfuscator([]byte(obfsPassword))
 			return udp.NewObfsUDPConn(udpConn, ob), sAddr, nil
 		}
 	}
@@ -120,7 +124,12 @@ func NewServerUDPConnFunc(obfsPassword string) ServerPacketConnFunc {
 		}
 	} else {
 		return func(listen string) (net.PacketConn, error) {
-			ob := obfs.NewXPlusObfuscator([]byte(obfsPassword))
+			var ob obfs.Obfuscator
+			if obfsPassword == obfs.FlipTrigger {
+				ob = obfs.NewFlipObfuscator()
+			} else {
+				ob = obfs.NewXPlusObfuscator([]byte(obfsPassword))
+			}
 			laddrU, err := net.ResolveUDPAddr("udp", listen)
 			if err != nil {
 				return nil, err
