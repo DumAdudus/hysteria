@@ -19,6 +19,8 @@ const (
 	xorKeySize = 32
 )
 
+var _ Obfuscator = &XPlusObfuscator{}
+
 // XPlusObfuscator obfuscates payload using one-time keys generated from hashing a pre-shared key and random salt.
 // Packet format: [salt][obfuscated payload]
 type XPlusObfuscator struct {
