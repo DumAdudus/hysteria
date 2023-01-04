@@ -7,7 +7,10 @@ import (
 	"github.com/valyala/bytebufferpool"
 )
 
-const udpBufferSize = 2048
+const (
+	Protocol      = "udp"
+	udpBufferSize = 1024 * 2
+)
 
 var (
 	hintBuf                = make([]byte, udpBufferSize)
