@@ -14,7 +14,7 @@ func NewFlipObfuscator() *BitFlipObfuscator {
 	return &BitFlipObfuscator{}
 }
 
-func flibBits(in []byte, out []byte) int {
+func flipBits(in []byte, out []byte) int {
 	for i, c := range in {
 		out[i] = ^c
 	}
@@ -22,11 +22,11 @@ func flibBits(in []byte, out []byte) int {
 }
 
 func (x *BitFlipObfuscator) Deobfuscate(in []byte, out []byte) int {
-	return flibBits(in, out)
+	return flipBits(in, out)
 }
 
 func (x *BitFlipObfuscator) Obfuscate(in []byte, out []byte) int {
-	return flibBits(in, out)
+	return flipBits(in, out)
 }
 
 func (x *BitFlipObfuscator) ObfuscateOnBuffer(in []byte, out *bytebufferpool.ByteBuffer) int {
