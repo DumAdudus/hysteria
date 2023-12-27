@@ -8,6 +8,7 @@ import (
 	"net"
 
 	"github.com/apernet/hysteria/core/congestion"
+	"github.com/sirupsen/logrus"
 
 	"github.com/apernet/hysteria/core/acl"
 	"github.com/apernet/hysteria/core/pmtud"
@@ -113,6 +114,9 @@ func (s *Server) handleClient(cc quic.Connection) {
 	auth, ok, err := s.handleControlStream(cc, stream)
 	if err != nil {
 		_ = qErrorProtocol.Send(cc)
+		logrus.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to parse control stream")
 		return
 	}
 	if !ok {
